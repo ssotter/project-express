@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cadastro de Usuários</title>
+  <style>
+    :root {
+      --bg:#0b0f17; --card:#111827; --muted:#94a3b8; --text:#e5e7eb;
+      --accent:#3b82f6; --accent-hover:#2563eb; --ok:#10b981; --error:#ef4444;
+      --border:#1f2937; --input:#0f172a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(90rem 60rem at 10% -10%, #1f2937 0%, #0b0f17 40%) no-repeat, var(--bg);
+      color: var(--text);
+      font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)), var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      padding: 1.25rem;
+    }
+    .card header { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 999px; background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
+    }
+    h1 { font-size: 1.25rem; margin: 0; }
+    p.desc { margin: .25rem 0 0; color: var(--muted); font-size: .95rem; }
+    form { margin-top: 1rem; display: grid; gap: 1rem; }
+    label { display: grid; gap: .5rem; font-weight: 600; }
+    input {
+      padding: .85rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--input);
+      color: var(--text);
+      outline: none;
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(59,130,246,.15);
+    }
+    .actions { display: flex; gap: .75rem; align-items: center; }
+    button {
+      background: var(--accent);
+      color: white;
+      padding: .9rem 1.1rem;
+      border: 0; border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .06s ease, background .15s ease;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:active { transform: translateY(1px); }
+    .hint { color: var(--muted); font-size: .9rem; }
+    .msg { display: none; margin-top: .5rem; font-weight: 600; }
+    .msg.ok { color: var(--ok); }
+    .msg.err { color: var(--error); }
+    .hr { height: 1px; background: var(--border); margin: 1rem 0; }
+    .list { margin-top: .75rem; }
+    .user {
+      padding: .65rem .8rem; border: 1px solid var(--border); border-radius: 10px;
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(255,255,255,0.02);
+      margin-bottom: .5rem;
+    }
+    .skeleton {
+      height: 44px; border-radius: 10px; background: linear-gradient(90deg, #0f172a 25%, #172036 50%, #0f172a 75%);
+      background-size: 200% 100%; animation: shimmer 1.2s infinite linear; margin-bottom: .5rem;
+    }
+    @keyframes shimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="title">
+    <header>
+      <span class="dot" aria-hidden="true"></span>
+      <div>
+        <h1 id="title">Cadastro de Usuários</h1>
+        <p class="desc">Crie um usuário informando nome e e-mail. Os dados são enviados para <code>/api/users</code>.</p>
+      </div>
+    </header>
+
+    <form id="form" novalidate>
+      <label>
+        Nome
+        <input id="name" name="name" type="text" minlength="2" placeholder="Ex.: Ana Silva" required />
+      </label>
+      <label>
+        E-mail
+        <input id="email" name="email" type="email" placeholder="ana@exemplo.com" required />
+      </label>
+      <div class="actions">
+        <button id="submitBtn" type="button">Cadastrar</button>
+        <span class="hint">Atalho: <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Enter</kbd></span>
+      </div>
+      <div id="msgOk" class="msg ok" role="status">Usuário cadastrado com sucesso!</div>
+      <div id="msgErr" class="msg err" role="alert">Falha ao cadastrar. Verifique os campos.</div>
+    </form>
+
+    <div class="hr"></div>
+
+    <section aria-labelledby="list-title">
+      <h2 id="list-title" style="margin:0 0 .5rem 0; font-size:1rem;">Usuários cadastrados</h2>
+      <div id="users" class="list" aria-live="polite">
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    console.log("[user-register] script carregado");
+
+    const $ = (sel) => document.querySelector(sel);
+    const form = $("#form");
+    const nameEl = $("#name");
+    const emailEl = $("#email");
+    const msgOk = $("#msgOk");
+    const msgErr = $("#msgErr");
+    const usersBox = $("#users");
+    const submitBtn = $("#submitBtn");
+    const API = window.location.origin + "/api";
+
+    function show(el) { el.style.display = "block"; }
+    function hide(el) { el.style.display = "none"; }
+    function resetMsgs() { hide(msgOk); hide(msgErr); }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    async function fetchUsers() {
+      usersBox.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+      try {
+        const url = API + "/users";
+        console.log("[GET]", url);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`GET ${url} -> ${res.status} ${res.statusText}`);
+        const list = await res.json();
+        usersBox.innerHTML = (Array.isArray(list) && list.length)
+          ? list.map(u => `
+              <div class="user">
+                <div>
+                  <strong>${escapeHtml(u.name || "")}</strong><br/>
+                  <small class="hint">${escapeHtml(u.email || "")}</small>
+                </div>
+                <small style="color:var(--muted)">#${escapeHtml(u.id || "")}</small>
+              </div>
+            `).join("")
+          : '<p class="hint">Nenhum usuário cadastrado ainda.</p>';
+      } catch (e) {
+        usersBox.innerHTML = `<p class="msg err">Falha ao listar: ${escapeHtml(e.message)}</p>`;
+        console.error(e);
+      }
+    }
+
+    async function submitForm(evt) {
+      evt.preventDefault();
+      console.log("[submitForm] Iniciando submissão do formulário");
+      resetMsgs();
+
+      const name = (nameEl.value || "").trim();
+      const email = (emailEl.value || "").trim();
+      console.log("[submit] dados:", { name, email });
+
+      if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        show(msgErr);
+        msgErr.textContent = "Nome/E-mail inválidos.";
+        return;
+      }
+
+      try {
+        const url = API + "/users";
+        console.log("[POST]", url);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({ name, email })
+        });
+
+        let payload = null;
+        try { payload = await res.clone().json(); } catch {}
+
+        if (!res.ok) {
+          console.error("[POST erro]", res.status, payload || (await res.text()));
+          show(msgErr);
+          msgErr.textContent = `Falha no cadastro (${res.status}).`;
+          return;
+        }
+
+        console.log("[POST ok]", payload);
+        form.reset();
+        nameEl.focus();
+        show(msgOk);
+        msgOk.textContent = "Usuário cadastrado com sucesso!";
+        await fetchUsers();
+      } catch (err) {
+        console.error(err);
+        show(msgErr);
+        msgErr.textContent = "Erro inesperado no cadastro.";
+      }
+    }
+
+    // Remover o retorno false do form
+    form.removeAttribute("onsubmit");
+    
+    // Bloqueia submit nativo e usa JS para POST
+    submitBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      submitForm(e);
+    });
+    
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      submitForm(e);
+    });
+
+    // Atalho Ctrl/Cmd + Enter
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        submitForm(e);
+      }
+    });
+
+    // Carrega lista ao abrir
+    fetchUsers();
+  </script>
+</body>
+</html>
